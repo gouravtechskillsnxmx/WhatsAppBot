@@ -1,5 +1,7 @@
 import os
 from typing import Dict, List
+import time
+import traceback
 
 import requests
 from fastapi import FastAPI, Request
@@ -60,8 +62,13 @@ def send_text(to: str, text: str):
         "type": "text",
         "text": {"body": text[:4096]},  # WhatsApp text limit safety
     }
-    r = requests.post(url, headers=headers, json=payload, timeout=30)
-    print("Send message status:", r.status_code, r.text)
+
+    try:
+        r = requests.post(url, headers=headers, json=payload, timeout=30)
+        print("Send message status:", r.status_code, r.text)
+    except Exception as e:
+        print("Send message exception:", repr(e))
+        traceback.print_exc()
 
 def get_ai_reply(user_id: str, user_text: str) -> str:
     # Initialize memory
@@ -74,18 +81,30 @@ def get_ai_reply(user_id: str, user_text: str) -> str:
     # Keep history short to control cost
     MEMORY[user_id] = MEMORY[user_id][-12:]  # last ~12 messages including system
 
-    resp = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=MEMORY[user_id],
-        temperature=0.3,
-    )
-    reply = resp.choices[0].message.content.strip()
+    # Retry OpenAI call (fixes transient Render connection errors)
+    last_err: Exception | None = None
+    for attempt in range(3):
+        try:
+            resp = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=MEMORY[user_id],
+                temperature=0.3,
+            )
+            reply = resp.choices[0].message.content.strip()
 
-    # Add assistant message back to memory
-    MEMORY[user_id].append({"role": "assistant", "content": reply})
-    MEMORY[user_id] = MEMORY[user_id][-12:]
+            # Add assistant message back to memory
+            MEMORY[user_id].append({"role": "assistant", "content": reply})
+            MEMORY[user_id] = MEMORY[user_id][-12:]
 
-    return reply
+            return reply
+        except Exception as e:
+            last_err = e
+            print(f"OpenAI exception (attempt {attempt+1}/3):", repr(e))
+            traceback.print_exc()
+            time.sleep(1.5 * (attempt + 1))
+
+    # If OpenAI keeps failing, do NOT break the bot—return a safe fallback reply.
+    return "Sorry, I’m having trouble reaching the AI right now. Please try again in a moment."
 
 @app.post("/webhook/whatsapp")
 async def receive_webhook(request: Request):
@@ -111,6 +130,7 @@ async def receive_webhook(request: Request):
         send_text(from_number, ai_text)
 
     except Exception as e:
-        print("Webhook parse/error:", e)
+        print("Webhook parse/error:", repr(e))
+        traceback.print_exc()
 
     return JSONResponse({"status": "ok"})
