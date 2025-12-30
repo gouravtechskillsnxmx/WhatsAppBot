@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request, Form
 from fastapi.responses import PlainTextResponse, JSONResponse, HTMLResponse, RedirectResponse
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey, func
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
-from passlib.hash import bcrypt
+from passlib.hash import pbkdf2_sha256
 from itsdangerous import URLSafeSerializer, BadSignature
 
 # ========== ENV ==========
@@ -111,7 +111,7 @@ def seed_agents():
                 email=email,
                 name=name,
                 role=role,
-                password_hash=bcrypt.hash(password),
+                password_hash=pbkdf2_sha256.hash(password),
             ))
         else:
             # keep existing password_hash to avoid overwriting on redeploy
@@ -267,7 +267,7 @@ def login(email: str = Form(...), password: str = Form(...)):
     db = SessionLocal()
     agent = db.query(Agent).filter(Agent.email == email).first()
     db.close()
-    if not agent or not bcrypt.verify(password, agent.password_hash):
+    if not agent or not pbkdf2_sha256.verify(password, agent.password_hash):
         return HTMLResponse("<h3>Invalid credentials</h3><a href='/login'>Try again</a>", status_code=401)
     resp = RedirectResponse("/inbox", status_code=302)
     set_session(resp, agent.id)
