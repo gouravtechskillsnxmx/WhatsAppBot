@@ -10,6 +10,7 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, F
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from passlib.hash import pbkdf2_sha256
 from itsdangerous import URLSafeSerializer, BadSignature
+from sqlalchemy.orm import joinedload
 
 # ========== ENV ==========
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "gourav_wa_verify_2025")
@@ -26,6 +27,9 @@ AGENT1_EMAIL = os.getenv("AGENT1_EMAIL", "agent1@beyond.com")
 AGENT1_PASSWORD = os.getenv("AGENT1_PASSWORD", "agent123")
 AGENT2_EMAIL = os.getenv("AGENT2_EMAIL", "agent2@beyond.com")
 AGENT2_PASSWORD = os.getenv("AGENT2_PASSWORD", "agent123")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
 
 # ========== DB ==========
 connect_args = {"check_same_thread": False} if DB_URL.startswith("sqlite") else {}
@@ -136,6 +140,45 @@ seed_agents()
 # ========== APP ==========
 app = FastAPI()
 
+@app.get("/dashboard/daily", response_class=HTMLResponse)
+def dashboard_daily(request: Request):
+    agent = require_login(request)
+    if not agent:
+        return RedirectResponse("/login", status_code=302)
+
+    db = SessionLocal()
+    # last 1 day
+    since = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    rows = db.query(
+        Conversation.wa_id,
+        Conversation.customer_name,
+        func.count(Message.id).label("msg_count"),
+        func.max(Message.ts_utc).label("last_ts"),
+    ).join(Message, Message.conversation_id == Conversation.id)\
+     .filter(Message.direction == "inbound")\
+     .filter(Message.ts_utc >= since)\
+     .group_by(Conversation.wa_id, Conversation.customer_name)\
+     .order_by(func.count(Message.id).desc())\
+     .all()
+    db.close()
+
+    tr = ""
+    for wa_id, name, msg_count, last_ts in rows:
+        tr += f"<tr><td>{wa_id}</td><td>{name or ''}</td><td>{msg_count}</td><td>{last_ts}</td></tr>"
+
+    return HTMLResponse(f"""
+    <html><body style="font-family:Arial;padding:16px">
+    <h2>Daily Interested Contacts (Today)</h2>
+    <p><a href="/inbox">← Back to Inbox</a></p>
+    <table border="1" cellpadding="8" cellspacing="0">
+      <tr><th>Number</th><th>Name</th><th>Inbound Msg Count</th><th>Last Message</th></tr>
+      {tr}
+    </table>
+    </body></html>
+    """)
+
+
 @app.get("/")
 def health():
     return {"status": "ok"}
@@ -165,9 +208,32 @@ def wa_send_text(to: str, text: str):
 
 # --- Plug your AI here (keep your existing OpenAI function if you already have it) ---
 def get_ai_reply(conversation_id: int, user_text: str) -> str:
-    # Replace with your existing AI call:
-    # return your_openai_reply(...)
-    return f"AI reply placeholder: {user_text}"
+    # If key missing, don't break webhook; return fallback
+    if not OPENAI_API_KEY:
+        return "AI is not configured yet. A human will get back to you shortly."
+
+    try:
+        url = "https://api.openai.com/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": OPENAI_MODEL,
+            "messages": [
+                {"role": "system", "content": "You are a helpful WhatsApp assistant. Keep replies short and clear."},
+                {"role": "user", "content": user_text},
+            ],
+            "temperature": 0.3,
+        }
+
+        r = requests.post(url, headers=headers, json=payload, timeout=30)
+        r.raise_for_status()
+        data = r.json()
+        return (data["choices"][0]["message"]["content"] or "").strip() or "Okay."
+    except Exception as e:
+        print("OpenAI error:", repr(e))
+        return "I’m having trouble replying right now. A human will get back to you shortly."
 
 def upsert_conversation(db, wa_id: str, customer_name: Optional[str]) -> Conversation:
     conv = db.query(Conversation).filter(Conversation.wa_id == wa_id).first()
@@ -295,12 +361,14 @@ def inbox(request: Request):
 
     db = SessionLocal()
     convs = (
-        db.query(Conversation)
-        .order_by(Conversation.last_message_at.desc().nullslast(), Conversation.id.desc())
-        .limit(50)
-        .all()
-    )
+    	db.query(Conversation)
+    	.options(joinedload(Conversation.assigned_agent))
+    	.order_by(Conversation.last_message_at.desc().nullslast(), Conversation.id.desc())
+    	.limit(50)
+    	.all()
+	)
     db.close()
+
 
     rows = ""
     for c in convs:
@@ -336,7 +404,13 @@ def chat_view(request: Request, conv_id: int):
         return RedirectResponse("/login", status_code=302)
 
     db = SessionLocal()
-    conv = db.query(Conversation).filter(Conversation.id == conv_id).first()
+    conv = (
+    	db.query(Conversation)
+    	.options(joinedload(Conversation.assigned_agent))
+    	.filter(Conversation.id == conv_id)
+    	.first()
+    )
+
     msgs = db.query(Message).filter(Message.conversation_id == conv_id).order_by(Message.ts_utc.asc()).all()
     db.close()
     if not conv:
