@@ -1,16 +1,26 @@
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import requests
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import PlainTextResponse, JSONResponse, HTMLResponse, RedirectResponse
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey, func
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey, func, or_
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from passlib.hash import pbkdf2_sha256
 from itsdangerous import URLSafeSerializer, BadSignature
 from sqlalchemy.orm import joinedload
+
+IST_OFFSET = timedelta(hours=5, minutes=30)
+
+def to_ist(dt):
+    if not dt:
+        return ""
+    try:
+        return (dt + IST_OFFSET).strftime("%d %b %Y %I:%M %p")
+    except Exception:
+        return str(dt)
 
 # ========== ENV ==========
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "gourav_wa_verify_2025")
@@ -165,7 +175,7 @@ def dashboard_daily(request: Request):
 
     tr = ""
     for wa_id, name, msg_count, last_ts in rows:
-        tr += f"<tr><td>{wa_id}</td><td>{name or ''}</td><td>{msg_count}</td><td>{last_ts}</td></tr>"
+        tr += f"<tr><td>{wa_id}</td><td>{name or ''}</td><td>{msg_count}</td><td>{to_ist(last_ts)}</td></tr>"
 
     return HTMLResponse(f"""
     <html><body style="font-family:Arial;padding:16px">
@@ -360,13 +370,21 @@ def inbox(request: Request):
         return RedirectResponse("/login", status_code=302)
 
     db = SessionLocal()
+
+    q = (
+        db.query(Conversation)
+        .options(joinedload(Conversation.assigned_agent))
+    )
+
+    # Admin sees all; Agents see only unassigned + assigned-to-me
+    if agent.role != "admin":
+        q = q.filter(or_(Conversation.assigned_agent_id == None, Conversation.assigned_agent_id == agent.id))
+
     convs = (
-    	db.query(Conversation)
-    	.options(joinedload(Conversation.assigned_agent))
-    	.order_by(Conversation.last_message_at.desc().nullslast(), Conversation.id.desc())
-    	.limit(50)
-    	.all()
-	)
+        q.order_by(Conversation.last_message_at.desc().nullslast(), Conversation.id.desc())
+         .limit(50)
+         .all()
+    )
     db.close()
 
 
@@ -380,7 +398,7 @@ def inbox(request: Request):
           <td>{c.status}</td>
           <td>{c.mode}</td>
           <td>{assignee}</td>
-          <td>{c.last_message_at}</td>
+          <td>{to_ist(c.last_message_at)}</td>
         </tr>
         """
 
@@ -419,7 +437,7 @@ def chat_view(request: Request, conv_id: int):
     msg_html = ""
     for m in msgs:
         who = "Customer" if m.direction == "inbound" else ("AI" if m.sent_by_ai else "Agent")
-        msg_html += f"<div style='margin:6px 0'><b>{who}:</b> {m.text}</div>"
+        msg_html += f"<div style='margin:6px 0'><span style='color:#666'>{to_ist(m.ts_utc)}</span> <b>{who}:</b> {m.text}</div>"
 
     assigned = conv.assigned_agent.name if conv.assigned_agent else "Unassigned"
 
