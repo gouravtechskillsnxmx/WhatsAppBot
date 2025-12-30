@@ -104,24 +104,32 @@ def require_login(request: Request) -> Optional[Agent]:
 
 def seed_agents():
     db = SessionLocal()
+
     def upsert(email, name, role, password):
-        a = db.query(Agent).filter(Agent.email == email).first()
-        if not a:
-            db.add(Agent(
-                email=email,
-                name=name,
-                role=role,
-                password_hash=pbkdf2_sha256.hash(password),
-            ))
-        else:
-            # keep existing password_hash to avoid overwriting on redeploy
-            pass
+        # If already exists, don't insert again
+        existing = db.query(Agent).filter(Agent.email == email).first()
+        if existing:
+            return
+
+        db.add(Agent(
+            email=email,
+            name=name,
+            role=role,
+            password_hash=pbkdf2_sha256.hash(password),
+        ))
 
     upsert(ADMIN_EMAIL, "Admin", "admin", ADMIN_PASSWORD)
     upsert(AGENT1_EMAIL, "Agent 1", "agent", AGENT1_PASSWORD)
     upsert(AGENT2_EMAIL, "Agent 2", "agent", AGENT2_PASSWORD)
-    db.commit()
-    db.close()
+
+    try:
+        db.commit()
+    except Exception:
+        # In case of a rare race condition on deploy/restart
+        db.rollback()
+    finally:
+        db.close()
+
 
 seed_agents()
 
