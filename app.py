@@ -321,6 +321,9 @@ def _startup():
     finally:
         db.close()
 
+@app.head("/")
+def head_root():
+    return Response(status_code=200)
 
 @app.get("/")
 def root():
