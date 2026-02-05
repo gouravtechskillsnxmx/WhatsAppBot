@@ -328,6 +328,46 @@ def root():
 
 
 # --------------------------
+# Privacy / Terms (Meta app compliance)
+# --------------------------
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy():
+    return HTMLResponse(content="""<!doctype html>
+<html><head><meta charset='utf-8'/><meta name='viewport' content='width=device-width, initial-scale=1'/>
+<title>Privacy Policy</title></head>
+<body style='font-family:Arial, sans-serif; max-width:900px; margin:40px auto; padding:0 16px; line-height:1.5;'>
+<h1>Privacy Policy</h1>
+<p><b>Last updated:</b> {date}</p>
+<p>This WhatsApp bot collects and processes messages you send to provide requested responses and services.</p>
+<ul>
+  <li><b>Data we collect:</b> your WhatsApp number, message content, and message timestamps.</li>
+  <li><b>How we use data:</b> to respond to your queries, improve service quality, and maintain audit/compliance logs (if enabled).</li>
+  <li><b>Data sharing:</b> we do not sell your data. We may share data only with service providers used to run the bot (hosting/database) and where required by law.</li>
+  <li><b>Data retention:</b> retained only as long as needed for support/compliance; you may request deletion where applicable.</li>
+  <li><b>Security:</b> we use reasonable administrative and technical safeguards to protect data.</li>
+</ul>
+<p><b>Contact:</b> If you have privacy questions or deletion requests, contact the business owner/admin.</p>
+</body></html>""".format(date=dt.datetime.utcnow().date().isoformat()))
+
+
+@app.get("/terms", response_class=HTMLResponse)
+def terms():
+    return HTMLResponse(content="""<!doctype html>
+<html><head><meta charset='utf-8'/><meta name='viewport' content='width=device-width, initial-scale=1'/>
+<title>Terms of Service</title></head>
+<body style='font-family:Arial, sans-serif; max-width:900px; margin:40px auto; padding:0 16px; line-height:1.5;'>
+<h1>Terms of Service</h1>
+<p><b>Last updated:</b> {date}</p>
+<p>By using this WhatsApp bot, you agree to use it lawfully and not misuse or attempt to disrupt the service.</p>
+<ul>
+  <li>This bot provides informational responses and does not constitute professional advice unless explicitly stated.</li>
+  <li>Service availability may change without notice.</li>
+  <li>You are responsible for the accuracy of information you provide.</li>
+</ul>
+<p><b>Contact:</b> For support, contact the business owner/admin.</p>
+</body></html>""".format(date=dt.datetime.utcnow().date().isoformat()))
+
+# --------------------------
 # WhatsApp Webhook
 # --------------------------
 @app.get("/webhook/whatsapp")
