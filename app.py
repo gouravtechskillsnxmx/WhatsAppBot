@@ -45,10 +45,10 @@ from sqlalchemy.orm import (
 # --------------------------
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL") or "sqlite:///./local.db"
+DATABASE_URL = os.getenv("DB_URL") or "sqlite:///./local.db"
 WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN", "")
-WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
-WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "")
+WHATSAPP_PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID", "")
+WHATSAPP_VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "")
 ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "change_me")
 DEFAULT_TENANT_ID = int(os.getenv("DEFAULT_TENANT_ID", "1"))
 
@@ -330,7 +330,7 @@ def root():
 # --------------------------
 # WhatsApp Webhook
 # --------------------------
-@app.get("/webhooks/whatsapp")
+@app.get("/webhook/whatsapp")
 def wa_verify(request: Request):
     mode = request.query_params.get("hub.mode")
     token = request.query_params.get("hub.verify_token")
@@ -340,7 +340,7 @@ def wa_verify(request: Request):
     raise HTTPException(status_code=403, detail="Verification failed")
 
 
-@app.post("/webhooks/whatsapp")
+@app.post("/webhook/whatsapp")
 async def wa_inbound(payload: dict, db: Session = Depends(get_db)):
     tenant_id = DEFAULT_TENANT_ID
     enforce_plan(db, tenant_id)  # pricing enforcement on every message
@@ -614,7 +614,7 @@ def dashboard(request: Request, tenant_id: int = 0, db: Session = Depends(get_db
 
             <div style="height:14px"></div>
             <div class="muted" style="font-size:13px;">
-              Webhook: <code>/webhooks/whatsapp</code><br/>
+              Webhook: <code>/webhook/whatsapp</code><br/>
               Tip: Use <code>?token=YOUR_ADMIN_TOKEN</code> to open dashboard.
             </div>
           </div>
