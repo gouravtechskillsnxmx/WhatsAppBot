@@ -29,7 +29,7 @@ import datetime as dt
 from typing import Dict, Set, Optional, Tuple
 
 import requests
-from fastapi import FastAPI, Request, Depends, HTTPException, Form
+from fastapi import FastAPI, Request, Depends, HTTPException, Form, Response
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from dotenv import load_dotenv
 
@@ -233,14 +233,15 @@ def wa_headers():
     return {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
 
 
-def send_text(to: str, text: str):
+def send_text(to: str, text: str, phone_number_id: Optional[str] = None):
     if not WHATSAPP_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
         return {"skipped": True, "reason": "Missing WHATSAPP_TOKEN/WHATSAPP_PHONE_NUMBER_ID", "to": to, "text": text}
 
-    url = f"{GRAPH_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+    pid = phone_number_id or WHATSAPP_PHONE_NUMBER_ID
+    url = f"{GRAPH_URL}/{pid}/messages"
     try:
         print('[DBG] SENDING URL:', url)
-        print('[DBG] SENDING FROM phone_number_id (config):', WHATSAPP_PHONE_NUMBER_ID)
+        print('[DBG] SENDING FROM phone_number_id (effective):', pid, 'config:', WHATSAPP_PHONE_NUMBER_ID)
         print('[DBG] SENDING TO:', to)
     except Exception as _e:
         print('[DBG] send log error:', _e)
@@ -250,14 +251,15 @@ def send_text(to: str, text: str):
     return r.json()
 
 
-def send_menu(to: str, menu_payload: dict):
+def send_menu(to: str, menu_payload: dict, phone_number_id: Optional[str] = None):
     if not WHATSAPP_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
         return {"skipped": True, "reason": "Missing WHATSAPP_TOKEN/WHATSAPP_PHONE_NUMBER_ID", "to": to, "menu": menu_payload}
 
-    url = f"{GRAPH_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+    pid = phone_number_id or WHATSAPP_PHONE_NUMBER_ID
+    url = f"{GRAPH_URL}/{pid}/messages"
     try:
         print('[DBG] SENDING URL:', url)
-        print('[DBG] SENDING FROM phone_number_id (config):', WHATSAPP_PHONE_NUMBER_ID)
+        print('[DBG] SENDING FROM phone_number_id (effective):', pid, 'config:', WHATSAPP_PHONE_NUMBER_ID)
         print('[DBG] SENDING TO:', to)
     except Exception as _e:
         print('[DBG] send log error:', _e)
@@ -420,6 +422,8 @@ async def wa_inbound(payload: dict, db: Session = Depends(get_db)):
         except Exception as _e:
             print('[DBG] inbound meta parse error:', _e)
         # ----------------------------------------
+        # Use the incoming phone_number_id as the sender for replies (multi-number safe)
+        incoming_phone_number_id = meta.get('phone_number_id') if isinstance(meta, dict) else None
         # ---- DEBUG LOGS (message vs status) ----
         val = payload.get('entry',[{}])[0].get('changes',[{}])[0].get('value',{})
         print('[DBG] HAS messages:', 'messages' in val, 'HAS statuses:', 'statuses' in val)
@@ -444,74 +448,74 @@ async def wa_inbound(payload: dict, db: Session = Depends(get_db)):
             log_message(db, tenant_id, wa_from, wa_to or "", "inbound", body)
 
         if body.lower() in {"hi", "hello", "menu", "start"}:
-            send_menu(wa_from, MENU_PAYLOAD)
+            send_menu(wa_from, MENU_PAYLOAD, phone_number_id=incoming_phone_number_id)
             if is_enabled(db, tenant_id, F_COMPLIANCE_LOG):
                 log_message(db, tenant_id, wa_from, wa_to or "", "outbound", "MENU_SENT")
             return {"ok": True}
 
         if body == "MARKET_BRIEF":
             if not is_enabled(db, tenant_id, F_MARKET_BRIEF):
-                send_text(wa_from, "🔒 Market Brief is not enabled on your plan.")
+                send_text(wa_from, "🔒 Market Brief is not enabled on your plan.", phone_number_id=incoming_phone_number_id)
                 return {"ok": True}
-            send_text(wa_from, "📌 Market Brief (demo)\n• NIFTY: -0.42%\n• BANKNIFTY: Weak\n• FII: Net sellers\n\n(Connect live data feed next)")
+            send_text(wa_from, "📌 Market Brief (demo, phone_number_id=incoming_phone_number_id)\n• NIFTY: -0.42%\n• BANKNIFTY: Weak\n• FII: Net sellers\n\n(Connect live data feed next)")
             return {"ok": True}
 
         if body == "WHY_MARKET_MOVED":
             if not is_enabled(db, tenant_id, F_WHY_MARKET_MOVED):
-                send_text(wa_from, "🔒 Why Market Moved is not enabled on your plan.")
+                send_text(wa_from, "🔒 Why Market Moved is not enabled on your plan.", phone_number_id=incoming_phone_number_id)
                 return {"ok": True}
-            send_text(wa_from, "🧠 Why Market Moved (demo)\nOI unwinding + global yield move.\n(Connect news + derivatives feed next)")
+            send_text(wa_from, "🧠 Why Market Moved (demo, phone_number_id=incoming_phone_number_id)\nOI unwinding + global yield move.\n(Connect news + derivatives feed next)")
             return {"ok": True}
 
         if body == "RISK_ALERTS":
             if not is_enabled(db, tenant_id, F_RISK_RADAR):
-                send_text(wa_from, "🔒 Risk Radar is a Pro feature. Reply 'Upgrade' to enable.")
+                send_text(wa_from, "🔒 Risk Radar is a Pro feature. Reply 'Upgrade' to enable.", phone_number_id=incoming_phone_number_id)
                 return {"ok": True}
-            send_text(wa_from, "🔴 Risk Alerts (demo)\n• Client A: high margin usage\n• Client B: panic pattern\n(Connect client trades next)")
+            send_text(wa_from, "🔴 Risk Alerts (demo, phone_number_id=incoming_phone_number_id)\n• Client A: high margin usage\n• Client B: panic pattern\n(Connect client trades next)")
             return {"ok": True}
 
         if body == "CALL_PRIORITY":
             if not is_enabled(db, tenant_id, F_CALL_PRIORITY):
-                send_text(wa_from, "🔒 Call Priority is a Pro feature. Reply 'Upgrade' to enable.")
+                send_text(wa_from, "🔒 Call Priority is a Pro feature. Reply 'Upgrade' to enable.", phone_number_id=incoming_phone_number_id)
                 return {"ok": True}
-            send_text(wa_from, "📞 Priority Calls (demo)\n1) Client X — drawdown\n2) Client Y — expiry risk\n3) Client Z — panic history")
+            send_text(wa_from, "📞 Priority Calls (demo, phone_number_id=incoming_phone_number_id)\n1) Client X — drawdown\n2) Client Y — expiry risk\n3) Client Z — panic history")
             return {"ok": True}
 
         if body == "SEBI_ADVISORY":
             if not is_enabled(db, tenant_id, F_SEBI_ADVISORY):
-                send_text(wa_from, "🔒 SEBI Advisory Generator is not enabled on your plan.")
+                send_text(wa_from, "🔒 SEBI Advisory Generator is not enabled on your plan.", phone_number_id=incoming_phone_number_id)
                 return {"ok": True}
-            send_text(wa_from, "✅ Paste the message you want to rewrite in SEBI-safe language (demo).")
+            send_text(wa_from, "✅ Paste the message you want to rewrite in SEBI-safe language (demo, phone_number_id=incoming_phone_number_id).")
             return {"ok": True}
 
         if body == "CLIENT_AI":
             if not is_enabled(db, tenant_id, F_CLIENT_AI):
-                send_text(wa_from, "🔒 Client Query Assistant is not enabled on your plan.")
+                send_text(wa_from, "🔒 Client Query Assistant is not enabled on your plan.", phone_number_id=incoming_phone_number_id)
                 return {"ok": True}
-            send_text(wa_from, "🤖 Client Query Assistant (demo)\nAsk like: 'Reliance ka kya karu?'\n(Connect portfolio + risk profile next)")
+            send_text(wa_from, "🤖 Client Query Assistant (demo, phone_number_id=incoming_phone_number_id)\nAsk like: 'Reliance ka kya karu?'\n(Connect portfolio + risk profile next)")
             return {"ok": True}
 
         if body == "CALL_SUMMARY":
             if not is_enabled(db, tenant_id, F_CALL_AI):
-                send_text(wa_from, "🔒 Call AI summaries are an Elite feature. Reply 'Upgrade' to enable.")
+                send_text(wa_from, "🔒 Call AI summaries are an Elite feature. Reply 'Upgrade' to enable.", phone_number_id=incoming_phone_number_id)
                 return {"ok": True}
-            send_text(wa_from, "📞 Call Summary (demo)\nEmotion: anxious\nRisky promises: none\nFollow-up: suggested")
+            send_text(wa_from, "📞 Call Summary (demo, phone_number_id=incoming_phone_number_id)\nEmotion: anxious\nRisky promises: none\nFollow-up: suggested")
             return {"ok": True}
 
         if body == "SETTINGS" or body.lower() in {"settings", "upgrade"}:
             t = db.get(Tenant, tenant_id)
             flags = get_flags(db, tenant_id)
             enabled = [k.replace("F_", "") for k, v in flags.items() if v]
-            send_text(wa_from, f"⚙️ Current Plan: {t.plan if t else 'starter'}\nEnabled: {', '.join(enabled) if enabled else '(none)'}\n\nAdmin can upgrade from dashboard.")
+            send_text(wa_from, f"⚙️ Current Plan: {t.plan if t else 'starter'}\nEnabled: {', '.join(enabled, phone_number_id=incoming_phone_number_id) if enabled else '(none)'}\n\nAdmin can upgrade from dashboard.")
             return {"ok": True}
 
         # Basic SEBI-safe rewrite demo if user pastes risky wording
         if is_enabled(db, tenant_id, F_SEBI_ADVISORY) and len(body) > 15 and any(x in body.lower() for x in ["guarantee", "sure", "100%", "fixed return"]):
             safe = "✅ SEBI-safe version:\n“This is market-linked and subject to risk. Please consider your risk profile before investing.”\n\n(Connect your exact templates next)"
-            send_text(wa_from, safe)
+            send_text(wa_from, safe, phone_number_id=incoming_phone_number_id)
             return {"ok": True}
 
-        send_text(wa_from, "Reply 'Menu' to see options.")
+        send_text(wa_from, "Reply 'Menu' to see options.", phone_number_id=incoming_phone_number_id)
         return {"ok": True}
 
     except Exception as e:
