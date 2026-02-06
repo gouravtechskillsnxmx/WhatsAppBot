@@ -420,6 +420,22 @@ async def wa_inbound(payload: dict, db: Session = Depends(get_db)):
         except Exception as _e:
             print('[DBG] inbound meta parse error:', _e)
         # ----------------------------------------
+        # ---- DEBUG LOGS (message vs status) ----
+        val = payload.get('entry',[{}])[0].get('changes',[{}])[0].get('value',{})
+        print('[DBG] HAS messages:', 'messages' in val, 'HAS statuses:', 'statuses' in val)
+        if 'messages' in val:
+            try:
+                m = val['messages'][0]
+                print('[DBG] MESSAGE from user:', m.get('from'), 'to business:', val.get('metadata',{}).get('display_phone_number'))
+            except Exception as _e:
+                print('[DBG] message parse error:', _e)
+        if 'statuses' in val:
+            try:
+                s = val['statuses'][0]
+                print('[DBG] STATUS for msg_id:', s.get('id'), 'status:', s.get('status'))
+            except Exception as _e:
+                print('[DBG] status parse error:', _e)
+        # ------------------------------------------
         wa_from, wa_to, body = parse_inbound(payload)
         if not wa_from or not body:
             return {"ok": True}
