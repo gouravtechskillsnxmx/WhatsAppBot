@@ -238,6 +238,12 @@ def send_text(to: str, text: str):
         return {"skipped": True, "reason": "Missing WHATSAPP_TOKEN/WHATSAPP_PHONE_NUMBER_ID", "to": to, "text": text}
 
     url = f"{GRAPH_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+    try:
+        print('[DBG] SENDING URL:', url)
+        print('[DBG] SENDING FROM phone_number_id (config):', WHATSAPP_PHONE_NUMBER_ID)
+        print('[DBG] SENDING TO:', to)
+    except Exception as _e:
+        print('[DBG] send log error:', _e)
     payload = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text}}
     r = requests.post(url, headers=wa_headers(), json=payload, timeout=20)
     r.raise_for_status()
@@ -249,6 +255,12 @@ def send_menu(to: str, menu_payload: dict):
         return {"skipped": True, "reason": "Missing WHATSAPP_TOKEN/WHATSAPP_PHONE_NUMBER_ID", "to": to, "menu": menu_payload}
 
     url = f"{GRAPH_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
+    try:
+        print('[DBG] SENDING URL:', url)
+        print('[DBG] SENDING FROM phone_number_id (config):', WHATSAPP_PHONE_NUMBER_ID)
+        print('[DBG] SENDING TO:', to)
+    except Exception as _e:
+        print('[DBG] send log error:', _e)
     payload = {"messaging_product": "whatsapp", "to": to, **menu_payload}
     r = requests.post(url, headers=wa_headers(), json=payload, timeout=20)
     r.raise_for_status()
@@ -315,6 +327,17 @@ app = FastAPI(title="NxMx StockExec AI (single-file)", version="1.0.0")
 @app.on_event("startup")
 def _startup():
     init_db()
+    # ---- DEBUG LOGS (do not remove) ----
+    try:
+        svc = os.getenv('RENDER_SERVICE_NAME') or os.getenv('RENDER_SERVICE_ID') or 'unknown'
+        print('[DBG] service=', svc)
+        print('[DBG] ENV WHATSAPP_PHONE_NUMBER_ID=', os.getenv('WHATSAPP_PHONE_NUMBER_ID'))
+        print('[DBG] ENV PHONE_NUMBER_ID=', os.getenv('PHONE_NUMBER_ID'))
+        print('[DBG] CONFIG WHATSAPP_PHONE_NUMBER_ID=', WHATSAPP_PHONE_NUMBER_ID)
+        print('[DBG] TOKEN last6=', (WHATSAPP_TOKEN[-6:] if WHATSAPP_TOKEN else ''))
+    except Exception as _e:
+        print('[DBG] startup log error:', _e)
+    # -------------------------------------
     db = SessionLocal()
     try:
         ensure_default_tenant(db, DEFAULT_TENANT_ID)
@@ -389,6 +412,14 @@ async def wa_inbound(payload: dict, db: Session = Depends(get_db)):
     enforce_plan(db, tenant_id)  # pricing enforcement on every message
 
     try:
+        # ---- DEBUG LOGS (incoming webhook) ----
+        try:
+            meta = payload.get('entry',[{}])[0].get('changes',[{}])[0].get('value',{}).get('metadata',{})
+            print('[DBG] INCOMING display_phone_number:', meta.get('display_phone_number'))
+            print('[DBG] INCOMING phone_number_id:', meta.get('phone_number_id'))
+        except Exception as _e:
+            print('[DBG] inbound meta parse error:', _e)
+        # ----------------------------------------
         wa_from, wa_to, body = parse_inbound(payload)
         if not wa_from or not body:
             return {"ok": True}
