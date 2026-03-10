@@ -418,6 +418,7 @@ def wa_verify(request: Request):
 
 @app.post("/webhook/whatsapp")
 async def wa_inbound(payload: dict, db: Session = Depends(get_db)):
+    print("[DBG] FULL PAYLOAD:", json.dumps(payload, indent=2))
     tenant_id = DEFAULT_TENANT_ID
     enforce_plan(db, tenant_id)  # pricing enforcement on every message
 
