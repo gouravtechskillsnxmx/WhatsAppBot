@@ -243,21 +243,41 @@ def wa_headers():
     return {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
 
 
-def send_text(to: str, text: str):
-    if not WHATSAPP_TOKEN or not WHATSAPP_PHONE_NUMBER_ID:
-        return {"skipped": True, "reason": "Missing WHATSAPP_TOKEN/WHATSAPP_PHONE_NUMBER_ID", "to": to, "text": text}
+import requests
+import os
 
-    url = f"{GRAPH_URL}/{WHATSAPP_PHONE_NUMBER_ID}/messages"
-    try:
-        print('[DBG] SENDING URL:', url)
-        print('[DBG] SENDING FROM phone_number_id (config):', WHATSAPP_PHONE_NUMBER_ID)
-        print('[DBG] SENDING TO:', to)
-    except Exception as _e:
-        print('[DBG] send log error:', _e)
-    payload = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text}}
-    r = requests.post(url, headers=wa_headers(), json=payload, timeout=20)
-    r.raise_for_status()
-    return r.json()
+async def send_text(to_number: str, text: str):
+
+    exo_sid = os.getenv("EXO_SID")
+    exo_api_key = os.getenv("EXO_API_KEY")
+    exo_api_token = os.getenv("EXO_API_TOKEN")
+    exo_from = os.getenv("EXO_WHATSAPP_FROM")
+
+    if not exo_sid:
+        print("[DBG] EXOTEL ENV NOT FOUND")
+        return
+
+    url = f"https://api.in.exotel.com/v2/accounts/{exo_sid}/messages"
+
+    payload = {
+        "to": to_number,
+        "from": exo_from,
+        "channel": "whatsapp",
+        "content": {
+            "type": "text",
+            "text": text
+        }
+    }
+
+    print("[DBG] EXOTEL SENDING:", payload)
+
+    r = requests.post(
+        url,
+        json=payload,
+        auth=(exo_api_key, exo_api_token)
+    )
+
+    print("[DBG] EXOTEL RESPONSE:", r.status_code, r.text)
 
 
 def send_menu(to: str, menu_payload: dict):
@@ -406,6 +426,49 @@ def terms():
 # --------------------------
 # WhatsApp Webhook
 # --------------------------
+
+
+@app.api_route("/webhook/whatsapp", methods=["GET", "POST"])
+async def whatsapp_webhook(request: Request):
+    if request.method == "GET":
+        return {"status": "ok"}
+
+    payload = await request.json()
+
+    print("[DBG] FULL PAYLOAD:", payload)
+
+    # -----------------------------
+    # EXOTEL PAYLOAD SUPPORT
+    # -----------------------------
+    if "whatsapp" in payload and "messages" in payload["whatsapp"]:
+        msg = payload["whatsapp"]["messages"][0]
+
+        callback_type = msg.get("callback_type")
+        print("[DBG] EXOTEL callback_type:", callback_type)
+
+        if callback_type == "incoming_message":
+            sender = msg.get("from")
+            text = msg.get("content", {}).get("text", {}).get("body")
+
+            print("[DBG] EXOTEL MESSAGE from:", sender)
+            print("[DBG] EXOTEL MESSAGE text:", text)
+
+            if text:
+                await send_text(sender, "Hello 👋\n\nHow can we help you today?")
+
+        return {"status": "ok"}
+
+    # -----------------------------
+    # META FALLBACK (existing logic)
+    # -----------------------------
+    entry = payload.get("entry", [])
+    if entry:
+        print("[DBG] META PAYLOAD DETECTED")
+
+    return {"status": "ok"}
+
+
+
 @app.get("/webhook/whatsapp")
 def wa_verify(request: Request):
     mode = request.query_params.get("hub.mode")
