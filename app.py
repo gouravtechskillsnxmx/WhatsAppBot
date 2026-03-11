@@ -11,6 +11,7 @@ app = FastAPI()
 # =========================================================
 # ENV
 # =========================================================
+EXO_API_KEY = os.getenv("EXO_API_KEY", "").strip()
 EXO_SID = os.getenv("EXO_SID", "").strip()
 EXO_API_TOKEN = os.getenv("EXO_API_TOKEN", "").strip()
 EXO_WHATSAPP_FROM = os.getenv("EXO_WHATSAPP_FROM", "").strip()
@@ -80,7 +81,7 @@ def parse_inbound(payload: dict) -> Tuple[Optional[str], Optional[str], Optional
 
 
 def send_text(to: str, text: str):
-    if not EXO_SID or not EXO_API_TOKEN or not EXO_WHATSAPP_FROM:
+    if not EXO_API_KEY or not EXO_API_TOKEN or not EXO_SID or not EXO_WHATSAPP_FROM:
         msg = "Missing EXO_SID / EXO_API_TOKEN / EXO_WHATSAPP_FROM"
         print("[ERR]", msg)
         return {"ok": False, "error": msg}
@@ -112,7 +113,7 @@ def send_text(to: str, text: str):
             url,
             json=payload,
             headers={"Content-Type": "application/json"},
-            auth=(EXO_SID, EXO_API_TOKEN),
+            auth=(EXO_API_KEY, EXO_API_TOKEN),
             timeout=30,
         )
         print("[DBG] EXOTEL RESPONSE STATUS:", r.status_code)
