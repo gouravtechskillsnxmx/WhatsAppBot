@@ -11,13 +11,13 @@ app = FastAPI()
 # =========================================================
 # ENV
 # =========================================================
-EXO_SID = os.getenv("EXO_SID", "")
-EXO_API_TOKEN = os.getenv("EXO_API_TOKEN", "")
-EXO_WHATSAPP_FROM = os.getenv("EXO_WHATSAPP_FROM", "")
+EXO_SID = os.getenv("EXO_SID", "").strip()
+EXO_API_TOKEN = os.getenv("EXO_API_TOKEN", "").strip()
+EXO_WHATSAPP_FROM = os.getenv("EXO_WHATSAPP_FROM", "").strip()
 EXOTEL_WHATSAPP_API_BASE = os.getenv(
     "EXOTEL_WHATSAPP_API_BASE",
     "https://api.exotel.com/v2/accounts"
-)
+).strip()
 
 # =========================================================
 # HELPERS
@@ -145,8 +145,9 @@ def health():
 @app.get("/env-check")
 def env_check():
     return {
-        "EXO_SID_present": bool(EXO_SID),
+        "EXO_SID": EXO_SID,
         "EXO_API_TOKEN_present": bool(EXO_API_TOKEN),
+        "EXO_API_TOKEN_last6": EXO_API_TOKEN[-6:] if EXO_API_TOKEN else "",
         "EXO_WHATSAPP_FROM": EXO_WHATSAPP_FROM,
         "EXOTEL_WHATSAPP_API_BASE": EXOTEL_WHATSAPP_API_BASE,
     }
