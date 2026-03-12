@@ -15,6 +15,7 @@ EXO_API_KEY = os.getenv("EXO_API_KEY", "").strip()
 EXO_SID = os.getenv("EXO_SID", "").strip()
 EXO_API_TOKEN = os.getenv("EXO_API_TOKEN", "").strip()
 EXO_WHATSAPP_FROM = os.getenv("EXO_WHATSAPP_FROM", "").strip()
+EXO_API_PASSWORD = os.getenv("EXO_API_PASSWORD", "").strip()
 EXOTEL_WHATSAPP_API_BASE = os.getenv(
     "EXOTEL_WHATSAPP_API_BASE",
     "https://api.in.exotel.com/v2/accounts"
@@ -113,7 +114,7 @@ def send_text(to: str, text: str):
             url,
             json=payload,
             headers={"Content-Type": "application/json"},
-            auth=(EXO_SID, EXO_API_TOKEN),
+            auth=(EXO_SID, EXO_API_PASSWORD),
             timeout=30,
         )
         print("[DBG] EXOTEL RESPONSE STATUS:", r.status_code)
