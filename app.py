@@ -114,7 +114,8 @@ def send_text(to: str, text: str):
             url,
             json=payload,
             headers={"Content-Type": "application/json"},
-            auth=(EXO_SID, EXO_API_PASSWORD),
+            #auth=(EXO_SID, EXO_API_PASSWORD),
+	    auth=(EXO_API_KEY,EXO_API_TOKEN),
             timeout=30,
         )
         print("[DBG] EXOTEL RESPONSE STATUS:", r.status_code)
