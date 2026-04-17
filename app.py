@@ -173,13 +173,18 @@ async def webhook_whatsapp(request: Request):
     incoming = body.strip().lower()
 
     if incoming in ["hi", "hello", "hey", "start", "menu"]:
-        reply_text = (
-            "Hello 👋\n\n"
-            "Exotel WhatsApp test is working.\n\n"
-            f"You sent: {body}"
-        )
+    	reply_text = (
+        	"Hello 👋\n\n"
+        	"Thank you for contacting us.\n"
+        	"Your message has been received successfully.\n\n"
+        	"Please let us know how we may assist you."
+    	)
     else:
-        reply_text = f"Received your message: {body}"
+    	reply_text = (
+        	"Thank you for your message.\n\n"
+        	f"We have received: \"{body}\"\n\n"
+        	"We will respond as soon as possible."
+       )
 
     send_result = send_text(wa_from, reply_text)
     return {
