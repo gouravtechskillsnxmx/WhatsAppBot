@@ -28,8 +28,8 @@ EXOTEL_WHATSAPP_API_BASE = os.getenv(
 # =========================================================
 # DB (PERSISTENT ON RENDER DISK)
 # =========================================================
-DEFAULT_DB_PATH = "/data/team_inbox.db" if os.path.isdir("/data") else "team_inbox.db"
-DB_PATH = os.getenv("DB_PATH", DEFAULT_DB_PATH).strip()
+DEFAULT_DB_PATH = "var/data/team_inbox.db" if os.path.isdir("var/data") else "inbox.db"
+DB_PATH = os.getenv("DB_URL", DEFAULT_DB_PATH).strip()
 
 
 def get_db_connection():
